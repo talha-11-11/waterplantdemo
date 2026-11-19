@@ -1,0 +1,11 @@
+{
+  "name": "Water Plant Demo",
+  "short_name": "Water Plant",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f1f5f9",
+  "theme_color": "#0369A1",
+  "icons": [
+    { "src": "/logo.png", "sizes": "400x400", "type": "image/png", "purpose": "any" }
+  ]
+}

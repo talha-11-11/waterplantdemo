@@ -1,0 +1,27 @@
+# DEMO app (separate from any client). Render: New > Blueprint > pick this repo.
+# Use its OWN database (a new Neon project or database), never a client's.
+services:
+  - type: web
+    name: water-plant-demo
+    runtime: node
+    region: singapore
+    plan: free                 # demo: free is fine (sleeps after 15 min idle, ~1 min to wake)
+    buildCommand: npm ci && npm run build
+    startCommand: npm start    # creates tables, demo login and sample data on first start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEXT_PUBLIC_DEMO_MODE
+        value: "true"          # demo login, sample data, reset button, safe WhatsApp
+      - key: DATABASE_URL
+        sync: false            # the DEMO database's connection string
+      - key: SUPERADMIN_PASSWORD
+        sync: false            # PokitBio's password (login "pokitbio")
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: CRON_SECRET
+        generateValue: true
+      - key: WA_DRY_RUN
+        value: "true"
