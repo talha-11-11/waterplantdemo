@@ -15,6 +15,7 @@ export const settings = pgTable("settings", {
   jazzcashTitle: text("jazzcash_title").notNull().default(""),
   easypaisaNumber: text("easypaisa_number").notNull().default(""),
   easypaisaTitle: text("easypaisa_title").notNull().default(""),
+  cameraProduction: boolean("camera_production").notNull().default(false), // optional feature (v5)
 });
 
 // App logins (v2). role: "superadmin" (PokitBio) | "admin" (business owner)
@@ -41,6 +42,7 @@ export const customers = pgTable("customers", {
   priceDisp: integer("price_disp"),
   openingBalance: integer("opening_balance").notNull().default(0),
   startingCans: integer("starting_cans").notNull().default(0), // empty cans given to the customer at start (v2)
+  cycleDays: integer("cycle_days"), // v5: "delivers every N days" set by hand; null = learn from history
   active: boolean("active").notNull().default(true),
   notes: text("notes").notNull().default(""),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -55,6 +57,7 @@ export const deliveries = pgTable("deliveries", {
   priceStd: integer("price_std").notNull(), // snapshot
   priceDisp: integer("price_disp").notNull(),
   amount: integer("amount").notNull(),
+  emptiesReturned: integer("empties_returned"), // v5: empty cans taken back; null = same as delivered
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => [
   uniqueIndex("deliveries_customer_date_uq").on(t.customerId, t.date),
@@ -132,6 +135,39 @@ export const inventoryMoves = pgTable("inventory_moves", {
 }, (t) => [index("inventory_moves_item_idx").on(t.itemId)]);
 
 export type InventoryItem = typeof inventoryItems.$inferSelect;
+
+// Orders (v5): from WhatsApp (inbox or pasted message) or entered by hand
+export const orders = pgTable("orders", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id").references(() => customers.id, { onDelete: "set null" }),
+  fromName: text("from_name").notNull().default(""), // when no customer matched
+  fromPhone: text("from_phone").notNull().default(""),
+  date: date("date").notNull(), // wanted on
+  std: integer("std").notNull().default(0),
+  disp: integer("disp").notNull().default(0),
+  note: text("note").notNull().default(""),
+  source: text("source").notNull().default("manual"), // manual | paste | whatsapp
+  status: text("status").notNull().default("open"), // open | delivered | cancelled
+  rawText: text("raw_text").notNull().default(""),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  doneAt: timestamp("done_at"),
+}, (t) => [index("orders_date_status_idx").on(t.date, t.status)]);
+
+// Production log (v5, optional camera feature)
+export const productionLogs = pgTable("production_logs", {
+  id: serial("id").primaryKey(),
+  date: date("date").notNull(),
+  count: integer("count").notNull(),
+  method: text("method").notNull().default("manual"), // camera | manual
+  detected: integer("detected"), // what the camera counted before any correction
+  itemId: integer("item_id").references(() => inventoryItems.id, { onDelete: "set null" }),
+  note: text("note").notNull().default(""),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type Order = typeof orders.$inferSelect;
 
 export type Customer = typeof customers.$inferSelect;
 export type Delivery = typeof deliveries.$inferSelect;

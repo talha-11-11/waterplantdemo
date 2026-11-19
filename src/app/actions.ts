@@ -9,6 +9,8 @@ import { db, schema } from "@/db";
 import { SESSION_COOKIE, SESSION_MAX_AGE, signSession } from "@/lib/auth";
 import { requireUser } from "@/lib/session";
 import { createBackup, restoreBackup } from "@/lib/backup";
+import { closeOrdersOnDelivery, orderFromMessage, reopenOrdersOnUndo } from "@/lib/orders";
+import { addDays } from "@/lib/dates";
 import { pool } from "@/db";
 import { DEMO_USERNAME, isDemo, seedDemo } from "../../scripts/demo-seed.mjs";
 import { hashPassword, verifyPassword } from "../../scripts/password.mjs";
@@ -118,6 +120,7 @@ const deliverySchema = z.object({
   date: z.string().refine(isValidDate),
   std: z.number().int().min(0).max(50),
   disp: z.number().int().min(0).max(50),
+  empties: z.number().int().min(0).max(100).nullable().optional(), // empty cans taken back
 });
 
 export async function saveDelivery(input: z.infer<typeof deliverySchema>) {
@@ -130,11 +133,12 @@ export async function saveDelivery(input: z.infer<typeof deliverySchema>) {
   const p = pricesFor(c, s);
   const amount = d.std * p.std + d.disp * p.disp;
   await db.insert(deliveries)
-    .values({ customerId: d.customerId, date: d.date, std: d.std, disp: d.disp, priceStd: p.std, priceDisp: p.disp, amount })
+    .values({ customerId: d.customerId, date: d.date, std: d.std, disp: d.disp, priceStd: p.std, priceDisp: p.disp, amount, emptiesReturned: d.empties ?? null })
     .onConflictDoUpdate({
       target: [deliveries.customerId, deliveries.date],
-      set: { std: d.std, disp: d.disp, priceStd: p.std, priceDisp: p.disp, amount },
+      set: { std: d.std, disp: d.disp, priceStd: p.std, priceDisp: p.disp, amount, emptiesReturned: d.empties ?? null },
     });
+  await closeOrdersOnDelivery(d.customerId, d.date);
   revalidatePath("/", "layout");
   return { amount };
 }
@@ -143,6 +147,7 @@ export async function deleteDelivery(customerId: number, date: string) {
   await requireAuth();
   if (!isValidDate(date)) throw new Error("Bad date");
   await db.delete(deliveries).where(and(eq(deliveries.customerId, customerId), eq(deliveries.date, date)));
+  await reopenOrdersOnUndo(customerId, date);
   revalidatePath("/", "layout");
   return { amount: 0 };
 }
@@ -200,6 +205,7 @@ const customerSchema = z.object({
   priceDisp: optInt,
   openingBalance: z.coerce.number().int().default(0),
   startingCans: z.coerce.number().int().min(0).max(500).default(0),
+  cycleDays: optInt,
   notes: z.string().max(500).default(""),
   active: z.boolean().default(true),
 });
@@ -248,6 +254,7 @@ const settingsSchema = z.object({
   jazzcashTitle: z.string().trim().max(60).default(""),
   easypaisaNumber: z.string().trim().max(20).default(""),
   easypaisaTitle: z.string().trim().max(60).default(""),
+  cameraProduction: z.preprocess((v) => v === "on", z.boolean()).default(false),
   ownerPhone: z.string().trim().max(20),
 });
 
@@ -388,4 +395,82 @@ export async function deleteItem(form: FormData) {
   if (id > 0) await db.delete(schema.inventoryItems).where(eq(schema.inventoryItems.id, id));
   revalidatePath("/", "layout");
   redirect("/inventory");
+}
+
+/* ---------------- Orders ---------------- */
+
+const manualOrderSchema = z.object({
+  customerId: z.coerce.number().int().positive({ message: "Choose a customer" }),
+  date: z.string().refine(isValidDate, "Choose a date"),
+  std: z.coerce.number().int().min(0).max(50),
+  disp: z.coerce.number().int().min(0).max(50),
+  note: z.string().trim().max(200).default(""),
+});
+
+export async function createManualOrder(_: FormState, form: FormData): Promise<FormState> {
+  const me = await requireUser();
+  const p = manualOrderSchema.safeParse(Object.fromEntries(form.entries()));
+  if (!p.success) return { error: p.error.issues[0]?.message || "Invalid input" };
+  if (p.data.std + p.data.disp === 0) return { error: "Enter at least 1 can" };
+  await db.insert(schema.orders).values({ ...p.data, source: "manual", createdBy: me.username });
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+export async function createPastedOrder(_: FormState, form: FormData): Promise<FormState> {
+  const me = await requireUser();
+  const text = String(form.get("text") || "").trim();
+  if (!text) return { error: "Paste the WhatsApp message" };
+  const customerId = Number(form.get("customerId")) || null;
+  const r = await orderFromMessage({ text, source: "paste", by: me.username, customerId });
+  // Let the owner correct what was read before it is saved
+  const std = form.get("std"), disp = form.get("disp"), date = String(form.get("date") || "");
+  const fix: Record<string, unknown> = {};
+  if (std !== null && std !== "") fix.std = Math.max(0, Number(std) || 0);
+  if (disp !== null && disp !== "") fix.disp = Math.max(0, Number(disp) || 0);
+  if (isValidDate(date)) fix.date = date;
+  if (Object.keys(fix).length) await db.update(schema.orders).set(fix).where(eq(schema.orders.id, r.order.id));
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+export async function cancelOrder(form: FormData) {
+  await requireUser();
+  const id = Number(form.get("id"));
+  if (id > 0) await db.update(schema.orders).set({ status: "cancelled", doneAt: new Date() }).where(eq(schema.orders.id, id));
+  revalidatePath("/", "layout");
+}
+
+/** From the "Deliver tomorrow" list: turn a predicted customer into a real order. */
+export async function orderFromCycle(form: FormData) {
+  const me = await requireUser();
+  const customerId = Number(form.get("customerId"));
+  const date = String(form.get("date") || addDays(pkToday(), 1));
+  const [c] = await db.select().from(customers).where(eq(customers.id, customerId));
+  if (!c || !isValidDate(date)) return;
+  await db.insert(schema.orders).values({
+    customerId, date, std: c.defaultStd, disp: c.defaultDisp, source: "manual", note: "From delivery cycle", createdBy: me.username,
+  });
+  revalidatePath("/", "layout");
+}
+
+/* ---------------- Production (optional camera feature) ---------------- */
+
+export async function saveProduction(input: { count: number; detected: number | null; method: "camera" | "manual"; itemId: number | null; note?: string }) {
+  const me = await requireUser();
+  const count = Math.round(Number(input.count));
+  if (!Number.isFinite(count) || count <= 0 || count > 100000) throw new Error("Enter a count more than 0");
+  const today = pkToday();
+  await db.insert(schema.productionLogs).values({
+    date: today, count, method: input.method, detected: input.detected, itemId: input.itemId,
+    note: (input.note || "").slice(0, 120), createdBy: me.username,
+  });
+  if (input.itemId) {
+    await db.insert(schema.inventoryMoves).values({
+      itemId: input.itemId, date: today, qty: count, kind: "in",
+      note: input.method === "camera" ? "Production (camera count)" : "Production", createdBy: me.username,
+    });
+  }
+  revalidatePath("/", "layout");
+  return { ok: true };
 }

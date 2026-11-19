@@ -1,15 +1,24 @@
 import Link from "next/link";
 import NewItemForm from "@/components/NewItemForm";
 import StockControls from "@/components/StockControls";
+import { CameraIcon } from "@/components/icons";
+import { getSettings } from "@/lib/data";
 import { cansWithCustomers, itemsWithStock } from "@/lib/inventory";
 
 export default async function InventoryPage() {
-  const [items, outWithCustomers] = await Promise.all([itemsWithStock(), cansWithCustomers()]);
+  const [items, outWithCustomers, settings] = await Promise.all([itemsWithStock(), cansWithCustomers(), getSettings()]);
+  const cameraOn = settings.cameraProduction;
   const low = items.filter((i) => i.low);
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Stock</h1>
+
+      {cameraOn && (
+        <Link href="/production" className="card flex items-center justify-between p-4 font-semibold text-brand hover:bg-slate-50">
+          <span className="flex items-center gap-2"><CameraIcon className="size-5" /> Production (camera count)</span><span aria-hidden="true">›</span>
+        </Link>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <div className="card p-3">
@@ -17,7 +26,7 @@ export default async function InventoryPage() {
           <p className={`text-xl font-bold ${low.length ? "text-red-700" : "text-green-700"}`}>{low.length ? low.length : "None"}</p>
         </div>
         <div className="card p-3">
-          <p className="text-xs text-slate-600">Empty cans with customers</p>
+          <p className="text-xs text-slate-600">Cans with customers</p>
           <p className="text-xl font-bold">{outWithCustomers}</p>
         </div>
       </div>

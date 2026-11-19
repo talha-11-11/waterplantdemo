@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import type { InventoryItem } from "@/db/schema";
+import { cansHeld } from "./orders";
 
 const { inventoryItems, inventoryMoves, deliveries } = schema;
 
@@ -42,9 +43,11 @@ export async function deliveriesByDay(kind: string, from: string, limit = 10) {
     .groupBy(deliveries.date).orderBy(desc(deliveries.date)).limit(limit);
 }
 
-/** Customers' starting (empty) cans, i.e. cans out with customers. */
+/** Cans out with active customers right now (starting cans + delivered − empties taken back). */
 export async function cansWithCustomers(): Promise<number> {
-  const [r] = await db.select({ n: sql<string>`coalesce(sum(${schema.customers.startingCans}),0)` })
-    .from(schema.customers).where(eq(schema.customers.active, true));
-  return Number(r?.n ?? 0);
+  const [active, held] = await Promise.all([
+    db.select({ id: schema.customers.id }).from(schema.customers).where(eq(schema.customers.active, true)),
+    cansHeld(),
+  ]);
+  return active.reduce((n, c) => n + (held.get(c.id) ?? 0), 0);
 }

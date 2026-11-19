@@ -30,7 +30,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <span className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <Link href="/payments" className="text-sm font-semibold text-brand underline underline-offset-4">Payments</Link>
+        </span>
         <div className="flex gap-2">
           {[current, prevMonth(current)].map((mm) => (
             <Link key={mm} href={`/dashboard?m=${mm}`}

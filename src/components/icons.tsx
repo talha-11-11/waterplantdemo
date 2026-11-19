@@ -37,3 +37,9 @@ export const BackIcon = ({ className = "size-5" }: P) => (
 export const BoxIcon = ({ className = "size-6" }: P) => (
   <svg {...base} className={className}><path d="M21 8l-9-5-9 5v8l9 5 9-5z" /><path d="M3 8l9 5 9-5M12 13v8" /></svg>
 );
+export const OrderIcon = ({ className = "size-6" }: P) => (
+  <svg {...base} className={className}><rect x="5" y="3.5" width="14" height="18" rx="2" /><path d="M9 3.5h6v3H9zM9 11h6M9 15h4" /></svg>
+);
+export const CameraIcon = ({ className = "size-6" }: P) => (
+  <svg {...base} className={className}><path d="M3 8h4l2-3h6l2 3h4v12H3z" /><circle cx="12" cy="13.5" r="3.5" /></svg>
+);
