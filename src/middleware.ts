@@ -17,5 +17,5 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   // Everything except login, public bill links, cron (own secret), health, Next internals and public files.
-  matcher: ["/((?!login|b/|api/cron|api/health|api/whatsapp|_next/static|_next/image|favicon.ico|logo.png|pokitbio.png|pay/|manifest.webmanifest|icon-.*\\.png).*)"],
+  matcher: ["/((?!login|b/|api/cron|api/health|_next/static|_next/image|favicon.ico|logo.png|pokitbio.png|pay/|manifest.webmanifest|icon-.*\\.png).*)"],
 };

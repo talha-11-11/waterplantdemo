@@ -43,15 +43,6 @@ export default function SettingsForm({ s }: { s: Settings }) {
       </details>
       <p className="text-xs text-slate-600">Only accounts with a number show on bills. Empty = hidden.</p>
 
-      <h2 className="pt-2 font-semibold">Optional features</h2>
-      <label className="flex items-start gap-3 rounded-xl bg-slate-50 p-3 text-sm">
-        <input type="checkbox" name="cameraProduction" defaultChecked={s.cameraProduction} className="mt-0.5 size-5" />
-        <span>
-          <b>Camera production count (RO plants)</b>
-          <span className="block text-xs text-slate-600">Take a photo of filled bottles and the phone counts them, then adds them to stock. Shows on the Stock page when on.</span>
-        </span>
-      </label>
-
       {state?.error && <p className="text-sm text-red-700" role="alert">{state.error}</p>}
       {state?.ok && <p className="text-sm text-green-700" role="status">Saved.</p>}
       <button className="btn-primary w-full" disabled={pending}>{pending ? "Saving…" : "Save settings"}</button>

@@ -26,12 +26,9 @@ export default function CustomerForm({ customer, societies, defaults }: {
       </div>
       <p className="-mt-2 text-xs text-slate-600">Starting cans = how many empty cans the customer has from you, e.g. 4 given though he fills 3.</p>
       <details className="rounded-xl bg-slate-50 p-3">
-        <summary className="cursor-pointer text-sm font-semibold text-slate-700">Dispenser, delivery cycle, special rate &amp; old balance</summary>
+        <summary className="cursor-pointer text-sm font-semibold text-slate-700">Dispenser, special rate &amp; old balance</summary>
         <div className="mt-3">
           <Field label="Usual dispenser cans (0 = only when added at delivery)" name="defaultDisp" type="number" min={0} defaultValue={c?.defaultDisp ?? 0} />
-        </div>
-        <div className="mt-3">
-          <Field label="Delivers every … days (empty = learn from deliveries)" name="cycleDays" type="number" min={1} max={60} defaultValue={c?.cycleDays ?? ""} />
         </div>
         <div className="mt-3 grid grid-cols-2 gap-3">
           <Field label={`Standard rate (default ${defaults.priceStd})`} name="priceStd" type="number" min={0} defaultValue={c?.priceStd ?? ""} />

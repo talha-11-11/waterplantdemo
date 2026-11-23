@@ -9,8 +9,7 @@ import { ChatIcon, CheckIcon, PlusIcon } from "./icons";
 type Row = {
   id: number; name: string; address: string; phone: string;
   priceStd: number; priceDisp: number; std: number; disp: number; delivered: boolean;
-  balance: number; held: number; empties: number | null;
-  order: { std: number; disp: number; source: string } | null;
+  startingCans: number; balance: number;
 };
 
 const rs = (n: number) => `Rs ${n.toLocaleString("en-US")}`;
@@ -51,13 +50,9 @@ function RouteRow({ row, date, business, onDone }: { row: Row; date: string; bus
   // Dispenser cans stay hidden unless this customer usually takes them or the owner adds them now
   const [showDisp, setShowDisp] = useState(row.disp > 0);
   const [editing, setEditing] = useState(!row.delivered);
-  // Empty cans taken back: follows the cans delivered until changed by hand
-  const [emptiesTouched, setEmptiesTouched] = useState(row.empties != null && row.empties !== row.std + row.disp);
-  const [emptiesManual, setEmptiesManual] = useState(row.empties ?? row.std + row.disp);
   const [cashOpen, setCashOpen] = useState(false);
   const [pending, start] = useTransition();
   const amount = std * row.priceStd + disp * row.priceDisp;
-  const empties = emptiesTouched ? emptiesManual : std + disp;
   const delivered = row.delivered && !editing;
 
   const message = deliveryMessage({ date, std, disp, business });
@@ -68,7 +63,7 @@ function RouteRow({ row, date, business, onDone }: { row: Row; date: string; bus
     openWhatsApp();
     start(async () => {
       try {
-        await saveDelivery({ customerId: row.id, date, std, disp, empties });
+        await saveDelivery({ customerId: row.id, date, std, disp });
         setEditing(false);
         onDone(`Saved: ${row.name} · ${rs(amount)}`);
       } catch {
@@ -89,13 +84,8 @@ function RouteRow({ row, date, business, onDone }: { row: Row; date: string; bus
         <div className="min-w-0">
           <Link href={`/customers/${row.id}`} className="block truncate text-base font-semibold text-slate-900 hover:underline">{row.name}</Link>
           <p className="truncate text-sm text-slate-600">{row.address || "—"}</p>
-          {row.order && (
-            <p className="mt-1 inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-800">
-              {row.order.source === "manual" ? "Order" : "WhatsApp order"}: {row.order.disp ? `${row.order.std} + ${row.order.disp} dispenser` : `${row.order.std} cans`}
-            </p>
-          )}
           <p className="text-xs text-slate-600">
-            Holds {row.held} {row.held === 1 ? "can" : "cans"} ·{" "}
+            {row.startingCans > 0 && <>{row.startingCans} {row.startingCans === 1 ? "can" : "cans"} with customer · </>}
             {row.balance > 0 ? <span className="font-semibold text-red-700">Owes {rs(row.balance)}</span> : <span className="text-green-700">Clear</span>}
           </p>
         </div>
@@ -109,7 +99,7 @@ function RouteRow({ row, date, business, onDone }: { row: Row; date: string; bus
       {delivered ? (
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-700">
           <span>
-            {disp ? `${std} standard + ${disp} dispenser` : `${std} cans`} · <b>{rs(amount)}</b> · {empties} empty back
+            {disp ? `${std} standard + ${disp} dispenser` : `${std} cans`} · <b>{rs(amount)}</b>
           </span>
           <div className="flex gap-2">
             <button className="btn-outline h-9 px-3" onClick={openWhatsApp} aria-label={`Send WhatsApp to ${row.name} again`}><ChatIcon className="size-4" /></button>
@@ -129,8 +119,6 @@ function RouteRow({ row, date, business, onDone }: { row: Row; date: string; bus
               <PlusIcon /> Add dispenser can
             </button>
           )}
-          <Stepper label="Empty cans taken back" price={null} value={empties}
-            onChange={(n) => { setEmptiesTouched(true); setEmptiesManual(n); }} />
           <button className="btn-primary w-full" onClick={save} disabled={pending || std + disp === 0}>
             {pending ? "Saving…" : <><ChatIcon className="size-4" /> Deliver &amp; WhatsApp · {rs(amount)}</>}
           </button>
@@ -145,12 +133,12 @@ function RouteRow({ row, date, business, onDone }: { row: Row; date: string; bus
   );
 }
 
-function Stepper({ label, price, value, onChange }: { label: string; price: number | null; value: number; onChange: (n: number) => void }) {
+function Stepper({ label, price, value, onChange }: { label: string; price: number; value: number; onChange: (n: number) => void }) {
   return (
     <div className="flex items-center justify-between gap-3">
       <div>
         <p className="text-sm font-semibold">{label}</p>
-        <p className="text-xs text-slate-600">{price != null ? `${rs(price)} each` : "Collected from the customer"}</p>
+        <p className="text-xs text-slate-600">{rs(price)} each</p>
       </div>
       <div className="flex items-center overflow-hidden rounded-xl border border-slate-300">
         <button type="button" aria-label={`One less ${label}`} className="size-11 bg-slate-50 text-xl" onClick={() => onChange(Math.max(0, value - 1))}>−</button>

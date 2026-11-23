@@ -4,7 +4,7 @@ import { and, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { pkToday } from "./dates";
 
-const { backups, customers, deliveries, payments, bills, settings, inventoryItems, inventoryMoves, orders, productionLogs } = schema;
+const { backups, customers, deliveries, payments, bills, settings } = schema;
 
 const KEEP_DAILY = 45; // automatic daily copies kept
 const KEEP_OTHER = 20; // manual + before-restore copies kept
@@ -17,20 +17,14 @@ type Snapshot = {
   deliveries: (typeof deliveries.$inferSelect)[];
   payments: (typeof payments.$inferSelect)[];
   bills: (typeof bills.$inferSelect)[];
-  items?: (typeof inventoryItems.$inferSelect)[];
-  moves?: (typeof inventoryMoves.$inferSelect)[];
-  orders?: (typeof orders.$inferSelect)[];
-  production?: (typeof productionLogs.$inferSelect)[];
 };
 
 async function takeSnapshot(): Promise<Snapshot> {
-  const [s, c, d, p, b, items, moves, o, prod] = await Promise.all([
+  const [s, c, d, p, b] = await Promise.all([
     db.select().from(settings), db.select().from(customers), db.select().from(deliveries),
     db.select().from(payments), db.select().from(bills),
-    db.select().from(inventoryItems), db.select().from(inventoryMoves),
-    db.select().from(orders), db.select().from(productionLogs),
   ]);
-  return { v: 1, takenAt: new Date().toISOString(), settings: s, customers: c, deliveries: d, payments: p, bills: b, items, moves, orders: o, production: prod };
+  return { v: 1, takenAt: new Date().toISOString(), settings: s, customers: c, deliveries: d, payments: p, bills: b };
 }
 
 const summarize = (x: Snapshot) =>
@@ -87,10 +81,6 @@ export async function restoreBackup(id: number, by: string) {
   const undoId = await createBackup("before_restore", by);
 
   await db.transaction(async (tx) => {
-    await tx.delete(productionLogs);
-    await tx.delete(orders);
-    await tx.delete(inventoryMoves);
-    await tx.delete(inventoryItems);
     await tx.delete(bills);
     await tx.delete(payments);
     await tx.delete(deliveries);
@@ -109,25 +99,13 @@ export async function restoreBackup(id: number, by: string) {
     for (const part of chunks(snap.bills)) {
       await tx.insert(bills).values(part.map((r) => ({ ...r, createdAt: toDate(r.createdAt)!, sentAt: toDate(r.sentAt) })));
     }
-    for (const part of chunks(snap.items ?? [])) {
-      await tx.insert(inventoryItems).values(part.map((r) => ({ ...r, createdAt: toDate(r.createdAt)! })));
-    }
-    for (const part of chunks(snap.moves ?? [])) {
-      await tx.insert(inventoryMoves).values(part.map((r) => ({ ...r, createdAt: toDate(r.createdAt)! })));
-    }
-    for (const part of chunks(snap.orders ?? [])) {
-      await tx.insert(orders).values(part.map((r) => ({ ...r, createdAt: toDate(r.createdAt)!, doneAt: toDate(r.doneAt) })));
-    }
-    for (const part of chunks(snap.production ?? [])) {
-      await tx.insert(productionLogs).values(part.map((r) => ({ ...r, createdAt: toDate(r.createdAt)! })));
-    }
     if (snap.settings[0]) {
       const { id: _id, ...rest } = snap.settings[0];
       void _id;
       await tx.update(settings).set(rest).where(eq(settings.id, 1));
     }
     // Keep new ids after the restored ones
-    for (const t of ["customers", "deliveries", "payments", "bills", "inventory_items", "inventory_moves", "orders", "production_logs"]) {
+    for (const t of ["customers", "deliveries", "payments", "bills"]) {
       await tx.execute(sql.raw(
         `select setval(pg_get_serial_sequence('${t}', 'id'), coalesce((select max(id) from ${t}), 1), (select count(*) from ${t}) > 0)`,
       ));

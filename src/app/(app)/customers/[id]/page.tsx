@@ -8,7 +8,6 @@ import { customerBalance, getSettings, pricesFor } from "@/lib/data";
 import { dayOf, monthLabel, monthOf, monthStart, nextMonthStart, periodLabel, pkToday, shortDate } from "@/lib/dates";
 import { cansText, displayPhone, rs } from "@/lib/format";
 import { summaryParams, summaryText } from "@/lib/notify";
-import { cansHeld, cycles } from "@/lib/orders";
 import { waLink } from "@/lib/messages";
 
 export default async function CustomerPage({ params }: { params: Promise<{ id: string }> }) {
@@ -19,8 +18,6 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
   const today = pkToday();
   const m = monthOf(today);
   const s = await getSettings();
-  const [held, cyc] = await Promise.all([cansHeld(), cycles()]);
-  const cy = cyc.get(id);
   const [balance, monthDeliveries, recentPayments, billRows] = await Promise.all([
     customerBalance(id),
     db.select().from(schema.deliveries)
@@ -70,17 +67,12 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
           </div>
         </div>
         <p className="text-sm text-slate-600">
-          Holds <b>{held.get(id) ?? c.startingCans} cans</b> (started with {c.startingCans}) · Usual: {c.defaultDisp ? cansText(c.defaultStd, c.defaultDisp) : `${c.defaultStd} cans`} · Rates: Rs {p.std} / Rs {p.disp}
+          Starting cans: <b>{c.startingCans}</b> · Usual: {c.defaultDisp ? cansText(c.defaultStd, c.defaultDisp) : `${c.defaultStd} cans`} · Rates: Rs {p.std} / Rs {p.disp}
           {(c.priceStd != null || c.priceDisp != null) && " (special)"}
         </p>
         <a href={shareLink} target="_blank" rel="noopener noreferrer" className="btn-outline w-full">
           <ChatIcon /> Send update from my WhatsApp
         </a>
-        <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
-          <b>Delivery cycle:</b>{" "}
-          {cy?.every ? <>every {cy.every} day{cy.every > 1 ? "s" : ""}{cy.manual ? " (set by hand)" : " (learned)"}{cy.weekday ? `, usually ${cy.weekday}` : ""}
-            {cy.next ? <> · next due <b>{shortDate(cy.next)}</b></> : null}</> : "not enough deliveries yet to learn it"}
-        </p>
       </section>
 
       <section className="card p-4">
@@ -113,7 +105,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
           <ul className="divide-y divide-slate-100 text-sm">
             {monthDeliveries.map((d) => (
               <li key={d.id} className="flex justify-between py-2">
-                <span>{shortDate(d.date)} · {cansText(d.std, d.disp)} · {d.emptiesReturned ?? d.std + d.disp} empty back</span>
+                <span>{shortDate(d.date)} · {cansText(d.std, d.disp)}</span>
                 <span className="font-medium">{rs(d.amount)}</span>
               </li>
             ))}

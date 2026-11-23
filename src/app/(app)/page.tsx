@@ -3,8 +3,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import RouteList from "@/components/RouteList";
 import { balances, getSettings, pricesFor, societies } from "@/lib/data";
-import { addDays, isValidDate, pkToday, shortDate } from "@/lib/dates";
-import { cansHeld, dueOn, openOrdersFor } from "@/lib/orders";
+import { isValidDate, pkToday, shortDate } from "@/lib/dates";
 import { rs } from "@/lib/format";
 
 export default async function RoutePage({ searchParams }: { searchParams: Promise<{ s?: string; date?: string }> }) {
@@ -15,7 +14,7 @@ export default async function RoutePage({ searchParams }: { searchParams: Promis
   const society = sp.s && allSocieties.includes(sp.s) ? sp.s : allSocieties[0];
 
   const s = await getSettings();
-  const [list, dayDeliveries, allActive, bal, held, open, dueTomorrow] = await Promise.all([
+  const [list, dayDeliveries, allActive, bal] = await Promise.all([
     db.select().from(schema.customers)
       .where(and(eq(schema.customers.active, true), eq(schema.customers.society, society)))
       .orderBy(asc(schema.customers.address), asc(schema.customers.name)),
@@ -23,14 +22,7 @@ export default async function RoutePage({ searchParams }: { searchParams: Promis
     db.select({ id: schema.customers.id, society: schema.customers.society })
       .from(schema.customers).where(eq(schema.customers.active, true)),
     balances(),
-    cansHeld(),
-    openOrdersFor(date),
-    date === today ? dueOn(addDays(today, 1)) : Promise.resolve([]),
   ]);
-  const orderBy = new Map<number, { std: number; disp: number; source: string }>();
-  for (const o of open) if (o.customerId) orderBy.set(o.customerId, { std: o.std, disp: o.disp, source: o.source });
-  const ordersBySociety = new Map<string, number>();
-  for (const c of allActive) if (orderBy.has(c.id) && !dayDeliveries.some((d) => d.customerId === c.id)) ordersBySociety.set(c.society, (ordersBySociety.get(c.society) ?? 0) + 1);
   const byCustomer = new Map(dayDeliveries.map((d) => [d.customerId, d]));
   const cans = dayDeliveries.reduce((n, d) => n + d.std + d.disp, 0);
   const amount = dayDeliveries.reduce((n, d) => n + d.amount, 0);
@@ -43,11 +35,9 @@ export default async function RoutePage({ searchParams }: { searchParams: Promis
     return {
       id: c.id, name: c.name, address: c.address, phone: c.phone,
       priceStd: p.std, priceDisp: p.disp,
-      std: d?.std ?? orderBy.get(c.id)?.std ?? c.defaultStd, disp: d?.disp ?? orderBy.get(c.id)?.disp ?? c.defaultDisp,
+      std: d?.std ?? c.defaultStd, disp: d?.disp ?? c.defaultDisp,
       delivered: !!d,
-      empties: d ? d.emptiesReturned ?? d.std + d.disp : null,
-      held: held.get(c.id) ?? c.startingCans,
-      order: d ? null : orderBy.get(c.id) ?? null,
+      startingCans: c.startingCans,
       balance: bal.get(c.id) ?? 0,
     };
   });
@@ -77,23 +67,11 @@ export default async function RoutePage({ searchParams }: { searchParams: Promis
         </div>
       </section>
 
-      {(open.length > 0 || dueTomorrow.length > 0) && (
-        <div className="grid grid-cols-2 gap-2">
-          <Link href="/orders" className="card flex items-center justify-between p-3 hover:bg-slate-50">
-            <span><span className="block text-xs text-slate-600">Open orders</span><b className="text-lg">{open.length}</b></span><span aria-hidden="true">›</span>
-          </Link>
-          <Link href="/orders?tab=tomorrow" className="card flex items-center justify-between p-3 hover:bg-slate-50">
-            <span><span className="block text-xs text-slate-600">Deliver tomorrow</span><b className="text-lg">{dueTomorrow.length}</b></span><span aria-hidden="true">›</span>
-          </Link>
-        </div>
-      )}
-
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
         {allSocieties.map((name) => (
           <Link key={name} href={qs({ s: name })}
             className={`flex h-10 shrink-0 items-center rounded-full border px-4 text-sm font-semibold ${name === society ? "border-brand bg-brand text-white" : "border-slate-300 bg-white text-slate-700"}`}>
             {name} · {counts.get(name) ?? 0}
-            {(ordersBySociety.get(name) ?? 0) > 0 && <span className="ml-1.5 rounded-full bg-green-500 px-1.5 text-xs text-white">{ordersBySociety.get(name)}</span>}
           </Link>
         ))}
       </div>

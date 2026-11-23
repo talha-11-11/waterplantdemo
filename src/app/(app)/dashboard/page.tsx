@@ -2,7 +2,6 @@ import Link from "next/link";
 import { desc, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { balances, monthStats } from "@/lib/data";
-import { itemsWithStock } from "@/lib/inventory";
 import { isValidMonth, monthLabel, monthOf, pkToday, prevMonth } from "@/lib/dates";
 import { cansText, rs } from "@/lib/format";
 
@@ -10,7 +9,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const { m } = await searchParams;
   const current = monthOf(pkToday());
   const month = m && isValidMonth(m) ? m : current;
-  const lowStock = (await itemsWithStock()).filter((i) => i.low);
   const [stats, bal, cs, logs] = await Promise.all([
     monthStats(month),
     balances(),
@@ -30,10 +28,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <span className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold">Dashboard</h1>
-          <Link href="/payments" className="text-sm font-semibold text-brand underline underline-offset-4">Payments</Link>
-        </span>
+        <h1 className="text-2xl font-bold">Dashboard</h1>
         <div className="flex gap-2">
           {[current, prevMonth(current)].map((mm) => (
             <Link key={mm} href={`/dashboard?m=${mm}`}
@@ -50,13 +45,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <Tile label="Total unpaid (all time)" value={rs(totalDue)} tone="red" sub={`${dues.length} customers`} />
         <Tile label="Active customers" value={String(cs.filter((c) => c.active).length)} />
       </div>
-
-      {lowStock.length > 0 && (
-        <Link href="/inventory" className="card block border-red-200 bg-red-50 p-4">
-          <p className="font-semibold text-red-800">Low stock: {lowStock.length} item{lowStock.length > 1 ? "s" : ""}</p>
-          <p className="text-sm text-red-800">{lowStock.map((i) => `${i.name} (${i.stock} ${i.unit})`).join(" · ")}</p>
-        </Link>
-      )}
 
       <section className="card space-y-3 p-4">
         <h2 className="font-semibold">Sales by society</h2>

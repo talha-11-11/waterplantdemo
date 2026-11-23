@@ -34,10 +34,7 @@ export default async function BillsPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Monthly bills</h1>
-        <Link href="/payments" className="btn-outline h-10">Payments</Link>
-      </div>
+      <h1 className="text-2xl font-bold">Monthly bills</h1>
       <div className="flex gap-2">
         {months.map((mm) => (
           <Link key={mm} href={`/bills?m=${mm}`}
